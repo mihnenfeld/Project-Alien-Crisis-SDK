@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('help','check','setup','build','test','logs','update','all','server','play')]
+    [ValidateSet('help','check','setup','build','test','logs','update','all','server','play','map')]
     [string]$Action = 'help'
 )
 $ErrorActionPreference = 'Stop'
@@ -66,20 +66,52 @@ function Update-Local {
         if ($LASTEXITCODE -ne 0) { throw 'Git update fehlgeschlagen' }
     } finally { Pop-Location }
 }
+function Build-TestMap {
+    $generator = Join-Path $Root 'tools\generate-map.ps1'
+    $vmf = Join-Path $Root 'maps\ac_test_01.vmf'
+    & $generator -OutputPath $vmf
+    if (!(Test-Path $vmf)) { throw "Map-Generator fehlgeschlagen" }
+    $searchPaths = @((Join-Path $SteamBase 'bin'),(Join-Path $SteamBase 'sdktools'),(Join-Path $Sdk 'game'),(Join-Path $Sdk 'src'))
+    $toolPaths = @{}
+    foreach ($name in @('vbsp.exe','vvis.exe','vrad.exe')) {
+        $found = @()
+        foreach ($dir in $searchPaths) {
+            if (Test-Path $dir) { $found += @(Get-ChildItem -Path $dir -Filter $name -Recurse -File -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName) }
+        }
+        if ($found.Count -eq 0) { throw "Map-Compiler fehlt: $name. VMF ist erzeugt: $vmf" }
+        $toolPaths[$name] = $found[0]
+        Write-Host "$name : $($found[0])"
+    }
+    $mapBase = [System.IO.Path]::ChangeExtension($vmf,$null)
+    foreach ($name in @('vbsp.exe','vvis.exe','vrad.exe')) {
+        Write-Host "Map-Compile: $name"
+        & $toolPaths[$name] '-game' $ModPath $mapBase
+        if ($LASTEXITCODE -ne 0) { throw "$name fehlgeschlagen: Exit $LASTEXITCODE" }
+    }
+    $bsp = "$mapBase.bsp"
+    if (!(Test-Path $bsp)) { throw "BSP wurde nicht erzeugt: $bsp" }
+    $target = Join-Path $ModPath 'maps\ac_test_01.bsp'
+    New-Item -ItemType Directory -Force (Split-Path $target -Parent) | Out-Null
+    Copy-Item -Path $bsp -Destination $target -Force
+    Write-Host "Map bereit: $target" -ForegroundColor Green
+}
 switch ($Action) {
-    'help' { Write-Host 'Alien Crisis SDK: .\ac.ps1 check|setup|build|test|logs|update|all|server|play'; Write-Host 'server/play starten nur den Valve SDK-Basistest (noch keine AC-Map).' }
+    'help' { Write-Host 'Alien Crisis SDK: .\ac.ps1 check|setup|build|map|test|logs|update|all|server|play'; Write-Host 'server/play starten nur den Valve SDK-Basistest (noch keine AC-Map).' }
     'check' { $null = Check-Prerequisites }
     'setup' { $null = Check-Prerequisites; Write-Host 'Grundvoraussetzungen vorhanden. Build mit: .\ac.ps1 build' }
     'build' { Build-Game }
+    'map' { Check-Runtime; Build-TestMap }
     'test' { $null = Check-Prerequisites; Check-Runtime; Write-Host 'Build- und Runtime-Dateien vorhanden. Spielstart noch nicht bestaetigt.' }
     'logs' { Get-ChildItem $LogDir -File | Select-Object Name,Length,LastWriteTime }
     'update' { Update-Local }
-    'all' { Update-Local; Build-Game; Check-Runtime; Write-Host 'Update, Build und Runtime-Pruefung erfolgreich. Mit server/play separat starten.' }
+    'all' { Update-Local; Build-Game; Check-Runtime; Build-TestMap; Write-Host 'Update, Build und Map-Pruefung erfolgreich.' }
     'server' {
         Check-Runtime
         $maps = @(Get-ChildItem (Join-Path $ModPath 'maps') -Filter '*.bsp' -File -ErrorAction SilentlyContinue)
         if ($maps.Count -eq 0) { throw 'Noch keine BSP-Testmap im Mod-Verzeichnis. Serverstart folgt nach Erstellung einer eigenen Testmap.' }
-        $mapName = [System.IO.Path]::GetFileNameWithoutExtension($maps[0].Name)
+        $testMap = Join-Path $ModPath 'maps\ac_test_01.bsp'
+        if (!(Test-Path $testMap)) { throw 'ac_test_01.bsp fehlt. Zuerst .\ac.ps1 map ausfuehren.' }
+        $mapName = 'ac_test_01'
         Write-Host "Starte LAN-Dedicated-Server mit Map $mapName. Kein Port-Forwarding eingerichtet."
         & (Join-Path $SteamBase 'srcds_win64.exe') -game $ModPath -console -port 27015 +map $mapName +sv_lan 1 +maxplayers 2
     }
