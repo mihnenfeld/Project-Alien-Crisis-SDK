@@ -77,8 +77,11 @@ switch ($Action) {
     'all' { Update-Local; Build-Game; Check-Runtime; Write-Host 'Update, Build und Runtime-Pruefung erfolgreich. Mit server/play separat starten.' }
     'server' {
         Check-Runtime
-        Write-Host 'Starte lokalen Dedicated Server (nur Loopback, kein Internetzugriff).'
-        & (Join-Path $SteamBase 'srcds_win64.exe') -game $ModPath -console -port 27015 +map sdk_coop_test +sv_lan 1 +maxplayers 2
+        $maps = @(Get-ChildItem (Join-Path $ModPath 'maps') -Filter '*.bsp' -File -ErrorAction SilentlyContinue)
+        if ($maps.Count -eq 0) { throw 'Noch keine BSP-Testmap im Mod-Verzeichnis. Serverstart folgt nach Erstellung einer eigenen Testmap.' }
+        $mapName = [System.IO.Path]::GetFileNameWithoutExtension($maps[0].Name)
+        Write-Host "Starte LAN-Dedicated-Server mit Map $mapName. Kein Port-Forwarding eingerichtet."
+        & (Join-Path $SteamBase 'srcds_win64.exe') -game $ModPath -console -port 27015 +map $mapName +sv_lan 1 +maxplayers 2
     }
     'play' {
         Check-Runtime
