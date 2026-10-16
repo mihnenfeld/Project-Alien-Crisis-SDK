@@ -5,12 +5,12 @@ $script:blocks = [System.Collections.Generic.List[string]]::new()
 function Next-Id { $script:nextId++; return $script:nextId }
 function Brush([int]$x1,[int]$y1,[int]$z1,[int]$x2,[int]$y2,[int]$z2,[string]$texture = 'BRICK/BRICKWALL001A') {
     $faces = @(
-        "(($x1 $y1 $z2) ($x2 $y1 $z2) ($x2 $y2 $z2))",
-        "(($x1 $y2 $z1) ($x2 $y2 $z1) ($x2 $y1 $z1))",
-        "(($x1 $y1 $z1) ($x1 $y1 $z2) ($x1 $y2 $z2))",
-        "(($x2 $y2 $z1) ($x2 $y2 $z2) ($x2 $y1 $z2))",
-        "(($x2 $y1 $z1) ($x2 $y1 $z2) ($x1 $y1 $z2))",
-        "(($x1 $y2 $z1) ($x1 $y2 $z2) ($x2 $y2 $z2))"
+        "($x1 $y1 $z2) ($x2 $y1 $z2) ($x2 $y2 $z2)",
+        "($x1 $y2 $z1) ($x2 $y2 $z1) ($x2 $y1 $z1)",
+        "($x1 $y1 $z1) ($x1 $y1 $z2) ($x1 $y2 $z2)",
+        "($x2 $y2 $z1) ($x2 $y2 $z2) ($x2 $y1 $z2)",
+        "($x2 $y1 $z1) ($x2 $y1 $z2) ($x1 $y1 $z2)",
+        "($x1 $y2 $z1) ($x1 $y2 $z2) ($x2 $y2 $z2)"
     )
     $solidId = Next-Id
     $sides = foreach ($face in $faces) {
