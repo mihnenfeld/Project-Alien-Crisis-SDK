@@ -8,6 +8,22 @@ $Sdk = 'C:\Dev\source-sdk-2013'
 $Src = Join-Path $Sdk 'src'
 $LogDir = Join-Path $Root 'logs'
 New-Item -ItemType Directory -Force $LogDir | Out-Null
+$SteamBase = Join-Path ${env:ProgramFiles(x86)} 'Steam\steamapps\common\Source SDK Base 2013 Multiplayer'
+$ModPath = Join-Path $Sdk 'game\mod_hl2mp'
+function Check-Runtime {
+    $client = Join-Path $SteamBase 'hl2_win64.exe'
+    $server = Join-Path $SteamBase 'srcds_win64.exe'
+    $gameInfo = Join-Path $ModPath 'gameinfo.txt'
+    foreach ($path in @($client,$server,$gameInfo)) {
+        if (!(Test-Path $path)) { throw "Runtime-Datei fehlt: $path" }
+    }
+    foreach ($dll in @('client.dll','server.dll')) {
+        $path = Join-Path $ModPath "bin\x64\$dll"
+        if (!(Test-Path $path)) { throw "Modul fehlt: $path. Zuerst .\ac.ps1 build ausfuehren." }
+    }
+    Write-Host "Steam Runtime: $SteamBase"
+    Write-Host "SDK Mod: $ModPath"
+}
 function Check-Prerequisites {
     $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
     if (!(Test-Path $vswhere)) { throw 'vswhere.exe fehlt' }
@@ -40,22 +56,33 @@ function Build-Game {
     }
     Write-Host 'Client- und Server-Build erfolgreich.' -ForegroundColor Green
 }
+function Update-Local {
+    Push-Location $Root
+    try {
+        $dirty = @(git status --porcelain)
+        if ($LASTEXITCODE -ne 0) { throw 'Git Status fehlgeschlagen' }
+        if ($dirty.Count -gt 0) { throw 'Lokale Aenderungen vorhanden: Update abgebrochen.' }
+        git pull --ff-only
+        if ($LASTEXITCODE -ne 0) { throw 'Git update fehlgeschlagen' }
+    } finally { Pop-Location }
+}
 switch ($Action) {
-    'help' { Write-Host 'Alien Crisis SDK: .\ac.ps1 check|setup|build|test|logs|update|all'; Write-Host 'server/play folgen nach erfolgreichem Build und Mod-Installation.' }
+    'help' { Write-Host 'Alien Crisis SDK: .\ac.ps1 check|setup|build|test|logs|update|all|server|play'; Write-Host 'server/play starten nur den Valve SDK-Basistest (noch keine AC-Map).' }
     'check' { $null = Check-Prerequisites }
     'setup' { $null = Check-Prerequisites; Write-Host 'Grundvoraussetzungen vorhanden. Build mit: .\ac.ps1 build' }
     'build' { Build-Game }
-    'test' { $null = Check-Prerequisites; Write-Host 'Vorbedingungen OK; Ingame-Tests noch nicht automatisiert.' }
+    'test' { $null = Check-Prerequisites; Check-Runtime; Write-Host 'Build- und Runtime-Dateien vorhanden. Spielstart noch nicht bestaetigt.' }
     'logs' { Get-ChildItem $LogDir -File | Select-Object Name,Length,LastWriteTime }
-    'update' {
-        Push-Location $Root
-        try {
-            if ((git status --porcelain).Length -gt 0) { throw 'Lokale Aenderungen vorhanden: Update abgebrochen.' }
-            git pull --ff-only
-            if ($LASTEXITCODE -ne 0) { throw 'Git update fehlgeschlagen' }
-        } finally { Pop-Location }
+    'update' { Update-Local }
+    'all' { Update-Local; Build-Game; Check-Runtime; Write-Host 'Update, Build und Runtime-Pruefung erfolgreich. Mit server/play separat starten.' }
+    'server' {
+        Check-Runtime
+        Write-Host 'Starte lokalen Dedicated Server (nur Loopback, kein Internetzugriff).'
+        & (Join-Path $SteamBase 'srcds_win64.exe') -game $ModPath -console -port 27015 +map sdk_coop_test +sv_lan 1 +maxplayers 2
     }
-    'all' { $null = Check-Prerequisites; Build-Game; Write-Host 'Build OK. Spielstart wird im naechsten Meilenstein eingerichtet.' }
-    'server' { throw 'Dedicated-Server-Start noch nicht konfiguriert. Erst Basis-Build validieren.' }
-    'play' { throw 'Alien-Crisis-Mod noch nicht installiert. Erst Basis-Build validieren.' }
+    'play' {
+        Check-Runtime
+        Write-Host 'Starte Source-SDK-Mod-Client. Dies ist noch nicht Alien Crisis, sondern der SDK-Basistest.'
+        Start-Process -FilePath (Join-Path $SteamBase 'hl2_win64.exe') -WorkingDirectory $SteamBase -ArgumentList @('-game',("`"$ModPath`""),'-console')
+    }
 }
