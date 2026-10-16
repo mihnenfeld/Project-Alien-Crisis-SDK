@@ -27,8 +27,12 @@ function Build-Game {
     $msbuild = Check-Prerequisites
     $projects = @('client_win64_hl2mp.vcxproj','server_win64_hl2mp.vcxproj')
     foreach ($project in $projects) {
-        $path = Join-Path $Src $project
-        if (!(Test-Path $path)) { throw "Projekt fehlt: $path" }
+        $matches = @(Get-ChildItem -Path $Src -Filter $project -File -Recurse -ErrorAction Stop)
+        if ($matches.Count -ne 1) {
+            throw "Erwartet genau ein Projekt '$project', gefunden: $($matches.Count). createallprojects.bat pruefen."
+        }
+        $path = $matches[0].FullName
+        Write-Host "Projekt gefunden: $path"
         $log = Join-Path $LogDir ($project + '.log')
         Write-Host "Baue $project (Release x64)"
         & $msbuild $path '/p:Configuration=Release' '/p:Platform=x64' '/m:4' '/v:minimal' "/flp:logfile=$log;verbosity=normal"
